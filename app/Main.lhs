@@ -13,8 +13,18 @@ Finally, \%$ followed by a filename will verbatim copy/paste the contents of the
 \begin{code}
 module Main (main) where
 
+import System.Environment (getArgs)
+
 import Lib
 
 main :: IO ()
-main = someFunc
+main = do
+  z <- getArgs
+  if (length z) /= 1
+  then do
+    print "Please provide one .u file as an argument."
+  else do
+    y <- readFile $ head z 
+    _ <- commands y  
+    return ()
 \end{code}
