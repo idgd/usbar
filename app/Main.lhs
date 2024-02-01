@@ -25,6 +25,6 @@ main = do
     print "Please provide one .u file as an argument."
   else do
     y <- readFile $ head z 
-    _ <- commands y  
+    _ <- parse y  
     return ()
 \end{code}

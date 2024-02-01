@@ -28,19 +28,19 @@ When weaved, this section will be inserted in a listings, verbatim, or minting s
 The command \%\#, in contrast to \%\@, will add a listings/verbatim/minting section with the C code inside, but will not add it to the tangle.
 So, below, the C source will be visible in the \LaTeX output, but will not be present in the C file.
 
-%# C Example Section
+%$ C Example Section
 long evil(void) {
 	#define DONTDOTHIS 69
 	return DONTDOTHIS;
 }
-%#
+%$
 
 #!!!! Subsection for the Edification of Input Files
 
 When we add the \%\$ command, we will expect a file URI, open it, and insert it into the text at this point, removing the \%\$ command.
 So, the below command should insert a new C snippet, once it has been inserted.
 
-%$ TestC.u
+%% /home/pone/Documents/prog/usbar/test/TestC.u
 
 #!! Chapter Two: C Ordering
 
@@ -50,7 +50,7 @@ So, each C section needs a name; the \%\% command followed by that section's nam
 \LaTeX with links to the appropriate listings is inserted into the weave.
 Let's demo this by ordering the two C sections above.
 
-%% Imports
-%% Name of C Section
+%# Imports
+%# Name of C Section
 
 Ordering and sections can appear in any order.
