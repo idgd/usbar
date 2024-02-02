@@ -40,7 +40,7 @@ long evil(void) {
 When we add the \%\$ command, we will expect a file URI, open it, and insert it into the text at this point, removing the \%\$ command.
 So, the below command should insert a new C snippet, once it has been inserted.
 
-%% /home/pone/Documents/prog/usbar/test/TestC.u
+%% TestC.u
 
 #!! Chapter Two: C Ordering
 

@@ -7,6 +7,7 @@ module Lib
 
 import Data.Char
 import Data.List (isPrefixOf)
+import System.FilePath
 \end{code}
 
 The input is split into lines.
@@ -21,10 +22,11 @@ The \% commands are:
 \end{itemize}
 
 \begin{code}
-parse :: String -> IO ()
+parse :: FilePath -> IO ()
 parse a = do
-  let b = line <$> lines a
-  insert b
+  b <- readFile a
+  let c = line <$> lines b
+  insert c a
   return ()
 
 type Line = Either String Command
@@ -52,17 +54,19 @@ isInsert _ = False
 insertPath :: Line -> FilePath
 insertPath (Right (Insert a)) = a
 insertPath _ = ""
--- I need to insert the filepath down this chain, so I can find relative paths
-insert :: [Line] -> IO [Either Error Line]
-insert a = if any isInsert a
-           then do
-            let (b, c) = break isInsert a
-            let z = insertPath (head c)
-            d <- readFile z
-            let e = line <$> lines d
-            print e
-            return []
-           else return []
+insert :: [Line] -> FilePath -> IO [Line]
+insert a b =
+  if any isInsert a
+  then do
+    let (c, d) = break isInsert a
+    let z = insertPath (head d)
+    let y = (takeDirectory b) </> z
+    e <- readFile y 
+    let f = line <$> lines e
+    let g = c ++ f ++ (tail d)
+    mapM_ print g
+    insert g b
+  else return a
 
 data Chunk = Human String | Computer String
 chunks :: [Line] -> [Chunk]
@@ -81,7 +85,6 @@ command a = case a of
   ('%' : '#' : b) -> Order $ strip b
   ('%' : '$' : b) -> Listing $ strip b
   ('%' : '%' : b) -> Insert $ strip b
-  ('%' : b) -> Comment b
   _ -> Comment a
 \end{code}
 
