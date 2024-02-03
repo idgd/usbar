@@ -28,11 +28,28 @@ parse a = do
   c <- insert (line <$> lines b) a
   let d = comment c
   let e = source c
-  mapM_ print d
+  mapM_ print e
   return ()
 
+listing' :: Command -> [Line] -> [Line]
+listing' (Source a b) (Left c:d) = source' (Source a (b ++ "\n" ++ c)) d
+listing' (Source a b) (_:c) = source (Right (Source a b) : c)
+listing' _ _ = undefined
+listing :: [Line] -> [Line]
+listing ((Right (Source a "")):b) = source' (Source a "") b
+listing (a:b) = a : source b
+listing [a] = [a]
+listing [] = []
+
+source' :: Command -> [Line] -> [Line]
+source' (Source a b) (Left c:d) = source' (Source a (b ++ "\n" ++ c)) d
+source' (Source a b) (_:c) = source (Right (Source a b) : c)
+source' _ _ = undefined
 source :: [Line] -> [Line]
-source a = undefined
+source ((Right (Source a "")):b) = source' (Source a "") b
+source (a:b) = a : source b
+source [a] = [a]
+source [] = []
 
 comment :: [Line] -> [Line]
 comment a = comment' <$> a
@@ -46,9 +63,9 @@ data Rank = Part | Chapter | Section | Subsection
 type Title = String
 type Content = String
 data Command = Heirarch Rank Title
-             | Source Title
+             | Source Title Content
              | Order Title
-             | Listing Title
+             | Listing Title Content
              | Insert FilePath
              | Comment Content
   deriving Show
@@ -91,9 +108,9 @@ command a = case a of
   ('%' : '!' : '!' : '!' : b) -> Heirarch Section $ strip b
   ('%' : '!' : '!' : b) -> Heirarch Chapter $ strip b
   ('%' : '!' : b) -> Heirarch Part $ strip b
-  ('%' : '@' : b) -> Source $ strip b
+  ('%' : '@' : b) -> Source (strip b) ""
   ('%' : '#' : b) -> Order $ strip b
-  ('%' : '$' : b) -> Listing $ strip b
+  ('%' : '$' : b) -> Listing (strip b) ""
   ('%' : '%' : b) -> Insert $ strip b
   _ -> Comment a
 \end{code}
