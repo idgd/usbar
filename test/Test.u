@@ -35,14 +35,14 @@ long evil(void) {
 }
 %$
 
-#!!!! Subsection for the Edification of Input Files
+%!!!! Subsection for the Edification of Input Files
 
 When we add the \%\$ command, we will expect a file URI, open it, and insert it into the text at this point, removing the \%\$ command.
 So, the below command should insert a new C snippet, once it has been inserted.
 
 %% TestC.u
 
-#!! Chapter Two: C Ordering
+%!! Chapter Two: C Ordering
 
 When tangling, we need to know how the author intended the C source to be ordered.
 In order to do that, we use the \%\% command.

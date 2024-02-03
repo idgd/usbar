@@ -25,9 +25,20 @@ The \% commands are:
 parse :: FilePath -> IO ()
 parse a = do
   b <- readFile a
-  let c = line <$> lines b
-  insert c a
+  c <- insert (line <$> lines b) a
+  let d = comment c
+  let e = source c
+  mapM_ print d
   return ()
+
+source :: [Line] -> [Line]
+source a = undefined
+
+comment :: [Line] -> [Line]
+comment a = comment' <$> a
+comment' :: Line -> Line
+comment' (Right (Comment a)) = Left a 
+comment' a = a
 
 type Line = Either String Command
 data Rank = Part | Chapter | Section | Subsection
@@ -64,7 +75,6 @@ insert a b =
     e <- readFile y 
     let f = line <$> lines e
     let g = c ++ f ++ (tail d)
-    mapM_ print g
     insert g b
   else return a
 
