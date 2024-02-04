@@ -19,6 +19,22 @@ An example follows:
 int main(void) {
 	return EXIT_SUCCESS;
 }
+
+static void downgradeAllSharedCacheTableLocks(Btree *p){
+  BtShared *pBt = p->pBt;
+
+  SHARED_LOCK_TRACE(pBt, "downgradeLocks", 0, 0);
+
+  if( pBt->pWriter==p ){
+    BtLock *pLock;
+    pBt->pWriter = 0;
+    pBt->btsFlags &= ~(BTS_EXCLUSIVE|BTS_PENDING);
+    for(pLock=pBt->pLock; pLock; pLock=pLock->pNext){
+      assert( pLock->eLock==READ_LOCK || pLock->pBtree==p );
+      pLock->eLock = READ_LOCK;
+    }
+  }
+}
 %@
 
 When weaved, this section will be inserted in a listings, verbatim, or minting section (haven't decided yet).
