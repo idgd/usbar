@@ -14,7 +14,7 @@ The input is split into lines.
 Each line can start with text, or a \% command.
 The \% commands are:
 \begin{itemize}
-\item \%! :: Heirarch; each subsequent exclamation point decreases the rank of the heirarch, up to four.
+\item \%! :: Hierarch; each subsequent exclamation point decreases the rank of the Hierarch, up to four.
 \item \%\@ :: C source; these \emph{must} come in pairs, with the first having a title, and the second standing alone.
 \item \%\# :: C ordering; these \emph{must} correspond with exactly one C source title, and reorder source blocks into a tangled C file.
 \item \%\$ :: C listing; these follow the same rules as source, but are not inserted into a tangle.
@@ -27,9 +27,18 @@ parse a = do
   b <- readFile a
   c <- insert (line <$> lines b) a
   let d = comment c
-  let e = source c
-  mapM_ print e
+  let e = source d
+  let (f,g) = ordering e
+  print (tangle g f)
   return ()
+
+ordering :: [Line] -> ([Command], [Line])
+ordering ((Right (Order a)):b) = let (y,z) = ordering b
+                                 in (Order a : y, z)
+ordering (a:b) = let (y,z) = ordering b
+                 in (y, a : z)
+ordering [a] = ([], [a])
+ordering [] = ([], [])
 
 listing' :: Command -> [Line] -> [Line]
 listing' (Source a b) (Left c:d) = source' (Source a (b ++ "\n" ++ c)) d
@@ -58,17 +67,20 @@ comment' (Right (Comment a)) = Left a
 comment' a = a
 
 type Line = Either String Command
+
 data Rank = Part | Chapter | Section | Subsection
   deriving Show
 type Title = String
 type Content = String
-data Command = Heirarch Rank Title
+data Command = Hierarch Rank Title
              | Source Title Content
              | Order Title
              | Listing Title Content
              | Insert FilePath
              | Comment Content
   deriving Show
+instance Semigroup Command where
+  _ <> _ = undefined
 
 line :: String -> Line
 line a = if isPrefixOf "%" a
@@ -104,10 +116,10 @@ strip = dropWhile isSeparator
 
 command :: String -> Command
 command a = case a of
-  ('%' : '!' : '!' : '!' : '!' : b) -> Heirarch Subsection $ strip b
-  ('%' : '!' : '!' : '!' : b) -> Heirarch Section $ strip b
-  ('%' : '!' : '!' : b) -> Heirarch Chapter $ strip b
-  ('%' : '!' : b) -> Heirarch Part $ strip b
+  ('%' : '!' : '!' : '!' : '!' : b) -> Hierarch Subsection $ strip b
+  ('%' : '!' : '!' : '!' : b) -> Hierarch Section $ strip b
+  ('%' : '!' : '!' : b) -> Hierarch Chapter $ strip b
+  ('%' : '!' : b) -> Hierarch Part $ strip b
   ('%' : '@' : b) -> Source (strip b) ""
   ('%' : '#' : b) -> Order $ strip b
   ('%' : '$' : b) -> Listing (strip b) ""
@@ -115,8 +127,22 @@ command a = case a of
   _ -> Comment a
 \end{code}
 
+for each element in b.
+find element in y.
+add it to the string.
+
 \begin{code}
-tangle = undefined
+tangle :: [Line] -> [Command] -> String
+tangle a b = let z (Right (Source _ _)) = True
+                 z _ = False
+                 y = filter z a
+                 x (Right (Source _ b)) = b
+                 x _ = ""
+                 w u (Order v) = head $ filter (zz v) u
+                 zz b (Right (Source a _)) = a == b
+                 zz b _ = False
+                 yy = (x . (w y)) <$> b
+             in concat yy
 \end{code}
 
 \begin{code}
