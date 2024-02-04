@@ -5,32 +5,60 @@ module Lib
   , weave
   ) where
 
-import Data.Char
+import Data.Char (isSeparator)
 import Data.List (isPrefixOf)
-import System.FilePath
-\end{code}
+import System.FilePath (takeDirectory, (</>))
 
-The input is split into lines.
-Each line can start with text, or a \% command.
-The \% commands are:
-\begin{itemize}
-\item \%! :: Hierarch; each subsequent exclamation point decreases the rank of the Hierarch, up to four.
-\item \%\@ :: C source; these \emph{must} come in pairs, with the first having a title, and the second standing alone.
-\item \%\# :: C ordering; these \emph{must} correspond with exactly one C source title, and reorder source blocks into a tangled C file.
-\item \%\$ :: C listing; these follow the same rules as source, but are not inserted into a tangle.
-\item \%\% :: Insert another file verbatim. Recurses, so any new files will be able to import files of their own, and so on.
-\end{itemize}
-
-\begin{code}
-parse :: FilePath -> IO ()
+type Usbar = ([Command], [Line])
+parse :: FilePath -> IO Usbar
 parse a = do
   b <- readFile a
   c <- insert (line <$> lines b) a
-  let d = comment c
-  let e = source d
-  let (f,g) = ordering e
-  print (tangle g f)
-  return ()
+  return $ (ordering . listing . source . comment) c
+tangle :: Usbar -> String
+tangle (b,a) = let z (Right (Source _ _)) = True
+                   z _ = False
+                   y = filter z a
+                   x (Right (Source _ b)) = b
+                   x _ = ""
+                   w u (Order v) = head $ filter (zz v) u
+                   zz b (Right (Source a _)) = a == b
+                   zz b _ = False
+                   yy = (x . (w y)) <$> b
+               in concat yy
+
+header :: String
+header = unlines
+  ["\\documentclass{book}"
+  ,"\\usepackage[activate={true,nocompatibility}"
+  ,",final"
+  ,",tracking=true"
+  ,",kerning=true"
+  ,",spacing=true"
+  ,",factor=1100"
+  ,",stretch=10"
+  ,",shrink=10"
+  ,"]{microtype}"
+  ,"\\microtypecontext{spacing=nonfrench}"
+  ,"\\usepackage{listings}"
+  ,"\\begin{document}"
+  ]
+
+weave :: Usbar -> String
+weave (_, a) = header ++ weave' a
+weave' :: [Line] -> String
+weave' (Left a : b) = a ++ "\n" ++ weave' b
+weave' (Right (Hierarch Part b) : c) = "\\part{" ++ b ++ "}\n" ++ weave' c
+weave' (Right (Hierarch Chapter b) : c) = "\\chapter{" ++ b ++ "}\n" ++ weave' c
+weave' (Right (Hierarch Section b) : c) = "\\section{" ++ b ++ "}\n" ++ weave' c
+weave' (Right (Hierarch Subsection b) : c) = "\\subsection{" ++ b ++ "}\n" ++ weave' c
+weave' (Right (Source a b) : c) = "\\begin{lstlisting}\n" ++ b ++ "\n\\end{lstlisting}\n" ++ weave' c
+weave' (Right (Order a) : b) = "{\\tt" ++ a ++ "}\n" ++ weave' b
+weave' (Right (Listing a b) : c) = "\\begin{verbatim}\n" ++ b ++ "\n\\end{verbatim}\n" ++ weave' c
+weave' (Right (Insert a) : b) = weave' b
+weave' (Right (Comment a) : b) = a ++ weave' b
+weave' [] = "\\end{document}"
+
 
 ordering :: [Line] -> ([Command], [Line])
 ordering ((Right (Order a)):b) = let (y,z) = ordering b
@@ -41,12 +69,12 @@ ordering [a] = ([], [a])
 ordering [] = ([], [])
 
 listing' :: Command -> [Line] -> [Line]
-listing' (Source a b) (Left c:d) = source' (Source a (b ++ "\n" ++ c)) d
-listing' (Source a b) (_:c) = source (Right (Source a b) : c)
+listing' (Listing a b) (Left c:d) = listing' (Listing a (b ++ "\n" ++ c)) d
+listing' (Listing a b) (_:c) = listing (Right (Listing a b) : c)
 listing' _ _ = undefined
 listing :: [Line] -> [Line]
-listing ((Right (Source a "")):b) = source' (Source a "") b
-listing (a:b) = a : source b
+listing ((Right (Listing a "")):b) = listing' (Listing a "") b
+listing (a:b) = a : listing b
 listing [a] = [a]
 listing [] = []
 
@@ -125,26 +153,4 @@ command a = case a of
   ('%' : '$' : b) -> Listing (strip b) ""
   ('%' : '%' : b) -> Insert $ strip b
   _ -> Comment a
-\end{code}
-
-for each element in b.
-find element in y.
-add it to the string.
-
-\begin{code}
-tangle :: [Line] -> [Command] -> String
-tangle a b = let z (Right (Source _ _)) = True
-                 z _ = False
-                 y = filter z a
-                 x (Right (Source _ b)) = b
-                 x _ = ""
-                 w u (Order v) = head $ filter (zz v) u
-                 zz b (Right (Source a _)) = a == b
-                 zz b _ = False
-                 yy = (x . (w y)) <$> b
-             in concat yy
-\end{code}
-
-\begin{code}
-weave = undefined
 \end{code}

@@ -24,6 +24,10 @@ main = do
   then do
     print "Please provide one .u file as an argument."
   else do
-    _ <- parse $ head z
+    u <- parse $ head z
+    let i = tangle u
+    writeFile "aoeu.c" i
+    let j = weave u
+    writeFile "aoeu.tex" j
     return ()
 \end{code}
