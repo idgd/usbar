@@ -69,18 +69,14 @@ weave' (Right (Hierarch Chapter b) : c) =
   "\\chapter{" ++ b ++ "}\n" ++ weave' c
 weave' (Right (Hierarch Section b) : c) =
   "\\section{" ++ b ++ "}\n" ++ weave' c
-weave' (Right (Hierarch Subsection b) : c) = "\\subsection{"
-                                          ++ b
-                                          ++ "}\n"
-                                          ++ weave' c
+weave' (Right (Hierarch Subsection b) : c) =
+  "\\subsection{" ++ b ++ "}\n" ++ weave' c
 weave' (Right (Source _ b) : c) = "\\begin{lstlisting}\n"
                                ++ b
                                ++ "\n\\end{lstlisting}\n"
                                ++ weave' c
-weave' (Right (Order a) : b) = "\\noindent{\\tt "
-                            ++ a
-                            ++ "}\n\n"
-                            ++ weave' b
+weave' (Right (Order a) : b) =
+  "\\noindent{\\tt " ++ a ++ "}\n\n" ++ weave' b
 weave' (Right (Listing _ b) : c) = "\\begin{verbatim}\n"
                                 ++ b
                                 ++ "\n\\end{verbatim}\n"
@@ -94,35 +90,29 @@ line a = if isPrefixOf "%" a
          then Right $ command a
          else Left a
 
-isInsert :: Line -> Bool
-isInsert (Right (Insert _)) = True
-isInsert _ = False
-insertPath :: Line -> FilePath
-insertPath (Right (Insert a)) = a
-insertPath _ = ""
 insert :: [Line] -> FilePath -> IO [Line]
-insert a b = if any isInsert a
+insert a b = let z (Right (Insert _)) = True
+                 z _ = False
+                 y (Right (Insert x)) = x
+                 y _ = ""
+             in if any z a
              then do
-               let (c, d) = break isInsert a
-               let z = insertPath (head d)
-               e <- readFile $ (takeDirectory b) </> z
+               let (c, d) = break z a
+               e <- readFile $ (takeDirectory b) </> y (head d)
                insert (c ++ (line <$> lines e) ++ (tail d)) b
              else return a
 
-strip :: String -> String
-strip = dropWhile isSeparator
-
 command :: String -> Command
-command a = case a of
-  ('%' : '!' : '!' : '!' : '!' : b) ->
-    Hierarch Subsection $ strip b
-  ('%' : '!' : '!' : '!' : b) -> Hierarch Section $ strip b
-  ('%' : '!' : '!' : b) -> Hierarch Chapter $ strip b
-  ('%' : '!' : b) -> Hierarch Part $ strip b
-  ('%' : '@' : b) -> Source (strip b) ""
-  ('%' : '#' : b) -> Order $ strip b
-  ('%' : '$' : b) -> Listing (strip b) ""
-  ('%' : '%' : b) -> Insert $ strip b
+command a = let z = dropWhile isSeparator
+            in case a of
+  ('%' : '!' : '!' : '!' : '!' : b) -> Hierarch Subsection $ z b
+  ('%' : '!' : '!' : '!' : b) -> Hierarch Section $ z b
+  ('%' : '!' : '!' : b) -> Hierarch Chapter $ z b
+  ('%' : '!' : b) -> Hierarch Part $ z b
+  ('%' : '@' : b) -> Source (z b) ""
+  ('%' : '#' : b) -> Order $ z b
+  ('%' : '$' : b) -> Listing (z b) ""
+  ('%' : '%' : b) -> Insert $ z b
   _ -> Comment a
 
 comment :: [Line] -> [Line]
