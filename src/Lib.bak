@@ -67,7 +67,7 @@ type Content = String
 
 data Rank = Part | Chapter | Section | Subsection
 data Command = Hierarch Rank Title
-             | Source Title Content
+             | Source Title Content [Command]
              | Order Title
              | Listing Title Content
              | Insert FilePath

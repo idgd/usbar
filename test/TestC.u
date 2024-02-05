@@ -1,5 +1,0 @@
-%@ Imports
-#include <stdlib.h>
-%@@
-
-%% 2ndLevel.u

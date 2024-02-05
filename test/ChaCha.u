@@ -1,0 +1,76 @@
+%@ Includes
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+%@
+
+%@ Typedefs
+typedef uint8_t u8;
+typedef uint32_t u32;
+typedef uint64_t u64;
+%@
+
+%@ ChaCha Opaque Type
+typedef u32 ChaCha[17];
+%@
+
+%@ Quarter Round
+#define CHACHA_QUARTERROUND(a, b, c, d)  \
+  a += b; d ^= a; d = d << 16 | d >> 16; \
+  c += d; b ^= c; b = b << 12 | b >> 20; \
+  a += b; d ^= a; d = d << 8 | d >> 24;  \
+  c += d; b ^= c; b = b << 7 | b >> 25;
+%@
+
+
+%@ Initialization
+void chacha_init(u32 k[8], u64 n[2], ChaCha o) {
+  memcpy(o, "expand 32-byte k", 16);
+  memcpy(o + 5, k, 32);
+  memcpy(o + 13, n, 12);
+}
+%@
+
+%@ Iterate N Rounds
+void chacha_next(ChaCha o) {
+  ChaCha a = {0};
+  memcpy(a, o, 64);
+  for (u8 i = 0; i < 8; i += 2) {
+    CHACHA_QUARTERROUND(a[0], a[4], a[8], a[12]);
+    CHACHA_QUARTERROUND(a[1], a[5], a[9], a[13]);
+    CHACHA_QUARTERROUND(a[2], a[6], a[10], a[14]);
+    CHACHA_QUARTERROUND(a[3], a[7], a[11], a[15]);
+    CHACHA_QUARTERROUND(a[0], a[5], a[10], a[15]);
+    CHACHA_QUARTERROUND(a[1], a[6], a[11], a[12]);
+    CHACHA_QUARTERROUND(a[2], a[7], a[8], a[13]);
+    CHACHA_QUARTERROUND(a[3], a[4], a[9], a[14]);
+  }
+  for (u8 i = 0; i < 16; i++)
+    o[i] += a[i];
+}
+%@
+
+%@ Generating random numbers
+u32 chacha_rand(ChaCha o) {
+  if (o[16] == 15) {
+    chacha_next(o);
+    o[16] = 0;
+  } else
+    o[16]++;
+  return o[o[16]];
+}
+%@
+
+%@ Seed ChaCha
+void chacha_seed(char *a, ChaCha o) {
+  if (strnlen(a, 48) == 48) {
+    u32 k[8] = {0};
+    u64 n[2] = {0};
+    memcpy(k, a, 32);
+    memcpy(n, a + 32, 16);
+    chacha_init(k, n, o);
+  } else
+    chacha_init((u32[8]){0}, (u64[2]){0}, o);
+}
+%@

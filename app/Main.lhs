@@ -2,22 +2,17 @@
 module Main (main) where
 
 import System.Environment (getArgs)
-import System.FilePath
 
-import Lib
+import Usbar
 
 main :: IO ()
 main = do
-  z <- getArgs
-  if (length z) /= 1
+  a <- getArgs
+  if (length a) /= 1
   then do
-    print "Please provide one .u file as an argument."
+    putStrLn "Please provide one and only one .u file as an argument."
   else do
-    let z' = head z
-    u <- parse z' 
-    let i = tangle u
-    writeFile (takeBaseName z' ++ ".c") i
-    let j = weave u
-    writeFile (takeBaseName z' ++ ".tex") j
-    return ()
+    let z = head a
+    tangle z
+    weave z
 \end{code}

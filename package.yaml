@@ -40,7 +40,7 @@ library:
   source-dirs: src
 
 executables:
-  usbar-exe:
+  usbar:
     main:                Main.lhs
     source-dirs:         app
     ghc-options:
