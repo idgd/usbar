@@ -1,7 +1,13 @@
+This is the type we use to hold ChaCha's internal state.
+We use one additional 32-bit integer on top of the default 16 to store some state of our own.
+
 %@ ChaCha Opaque Type
 %# Typedefs
 typedef u32 ChaCha[17];
 %@
+
+The full dance takes twenty rounds of four quarter steps; there are two variations of the four steps, one running after the other.
+After the dance, the result is added to the previous step's state, giving us our final result.
 
 %@ Iterate N Rounds
 %# ChaCha Opaque Type
@@ -10,7 +16,7 @@ typedef u32 ChaCha[17];
 void chacha_next(ChaCha o) {
   ChaCha a = {0};
   memcpy(a, o, 64);
-  for (u8 i = 0; i < 8; i += 2) {
+  for (u8 i = 0; i < 20; i += 2) {
     CHACHA_QUARTERROUND(a[0], a[4], a[8], a[12]);
     CHACHA_QUARTERROUND(a[1], a[5], a[9], a[13]);
     CHACHA_QUARTERROUND(a[2], a[6], a[10], a[14]);
@@ -24,3 +30,5 @@ void chacha_next(ChaCha o) {
     o[i] += a[i];
 }
 %@
+
+The steps had some other designs before arriving at their current iteration; specifically, instead of a rotation, there was the idea to use two xors and two shifts, but the rotation was chosen instead because it is universally faster, while being equal or better than the alternative in diffusion.

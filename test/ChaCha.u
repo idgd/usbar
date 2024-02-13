@@ -1,28 +1,33 @@
-Notes:
-ChaCha and Salsa are ciphers--they're random number generators that are intended to be xor'd against data you want to encrypt. With shared secrets, you can decrypt the data with another xor.
-The quarter round represents the entire set of operations that ChaCha and salsa use to generate these psuedorandom numbers.
+\documentclass{article}
+\usepackage[activate={true,nocompatibility}
+           ,final
+           ,tracking=true
+           ,kerning=true
+           ,spacing=true
+           ,factor=1100
+           ,stretch=10
+           ,shrink=10
+           ]{microtype}
+\microtypecontext{spacing=nonfrench}
+\usepackage{listings}
 
-There are arguments to use more complex operations, but ChaCha/Salsa chose the ones they did for speed, and because with the operations done as they are, they have provided reasonable security--eight rounds is considered unbreakable today, and the default is to use 20 rounds. Not only do we want it fast, we also want it CONSISTENTLY fast--if the timing of each operation changes depending on the input, which integer multiplication does indeed do, then secrets could possibly leak if the attacker can read timing information.
+\begin{document}
 
-Another alternative not used in chacha/salsa is "s-boxes," which are lookup tables that take an 8-bit index and return a larger word. ChaCha/Salsa decided against it because of several reasons:
-1. L1 cache pressure: lookup tables are huge, and take a lot of space on caches.
-2. Equivalence of work done: S-boxes mangle input very thoroughly, but so do the integer operations that salsa does; there's no reason not to do this.
-3. Timing attacks: related to the L1 cache pressure, retrieving things from different parts of the table actually takes different amounts of time--so, attackers can read them more easily.
+Today we'll be implementing ChaCha20, a stream cipher capable of securely encrypting data, or generating random numbers.
+Our library will focus on properly implementing the second use-case; we want to generate a stream of secure random numbers, but don't care about encrypting data.
+ChaCha20 works by running twenty rounds (hence the name) of a "shuffle," or "dance" (hence the name) of the input numbers.
+Its input is a 512-bit, or 64-byte, block of numbers, with a 16-byte constant, a 32-byte key, and a 12-byte nonce.
+The key and nonce serve the same purpose, but allow a new stream to be generated from the same key, which can save processing for low-powered devices.
 
-There was a question on whether or not to reduce the number of rotations in the quarter round. It was decided to use rotations because it provides as much "diffusion" as two xors and two shifts, and is universally faster.
+ChaCha20 is a variation of the Salsa20 stream cipher.
+It was designed as a tiny performance enhancement to its predecessor, along with a mild strengthening of some flaws identified in Salsa20's first few years.
 
-What is this? it's a psuedo-random number generator; it takes a seed and a nonce (a second seed), and generates a bytestream that can be xor'd with data that needs to be encrypted to encrypt it. It generates this stream in 64 byte blocks. There is no dependency between each block, so any number of blocks can be computed in parallel. The generation of the starting block is fixed-time--a simple memory copy operation and that's it.
-
-What does it do?
-the below, 8 times, a configurable number of times, on different parts of the cipher block.
-
-Salsa decided on one type of quarter round repeated many times for L1-cache friendliness.
-
-So, most of the decisions were made to be "good enough" or "best-in-class" for cryptographic randomness, but left out some "might be better" stuff in interest of speed.
-
-ChaCha was made to improve on salsa both in speed and in diffusion.
+Let's take a look at the ChaCha dance first.
 
 %% QuarterRound.u
+
+Here we can see how the nonce, key, and constants are copied into the state block.
+Because the key, nonce, and constant are laid out linearly, the result can be achieved with just three calls to {\tt memcpy}, which is very efficient.
 
 %@ Initialization
 void chacha_init(u32 k[8], u64 n[2], ChaCha o) {
@@ -31,6 +36,8 @@ void chacha_init(u32 k[8], u64 n[2], ChaCha o) {
   memcpy(o + 13, n, 12);
 }
 %@
+
+We have a wrapper here which allows a user to initialize their state with 48 continguous bytes, instead of two values.
 
 %@ Seed ChaCha
 %# Iterate N Rounds
@@ -48,6 +55,10 @@ void chacha_seed(char *a, ChaCha o) {
 }
 %@
 
+Finally, here we see why we have one extra integer for our own state.
+Because we're not using this to encrypt a stream, we can use the full 512 bits of random data every iteration, and only call the (relatively expensive) iteration when we run out of random numbers in the current block.
+We wrap the number any time it grows too great, and call the next iteration; then return the lowest number in the state that hasn't been returned before.
+
 %@ Generating random numbers
 u32 chacha_rand(ChaCha o) {
   if (o[16] == 15) {
@@ -59,6 +70,8 @@ u32 chacha_rand(ChaCha o) {
 }
 %@
 
+Finally, there are some convenience typedefs for smaller character count and simpler lines.
+
 %@ Typedefs
 %# Includes
 
@@ -67,6 +80,8 @@ typedef uint32_t u32;
 typedef uint64_t u64;
 %@
 
+And the required includes.
+
 %@ Includes
 #include <stdint.h>
 #include <stdio.h>
@@ -74,5 +89,9 @@ typedef uint64_t u64;
 #include <string.h>
 %@
 
+As a last step, here's the order in which we add the source blocks to the tangled file:\\
+
 %# Seed ChaCha
 %# Generating random numbers
+
+\end{document}

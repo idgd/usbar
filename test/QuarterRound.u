@@ -1,11 +1,22 @@
 %@ Quarter Round
-
 #define CHACHA_QUARTERROUND(a, b, c, d)  \
   a += b; d ^= a; d = d << 16 | d >> 16; \
   c += d; b ^= c; b = b << 12 | b >> 20; \
   a += b; d ^= a; d = d << 8 | d >> 24;  \
   c += d; b ^= c; b = b << 7 | b >> 25;
-
 %@
+
+There are four distinct steps, operating on all of the input equally.
+First, addition, then a xor, and finally, a rotation.
+These steps achieve what cryptographers call `diffusion.'
+Diffusion is the property where one bit change in the input leads to a change in half the bits of the output; similarly, to change just one bit in the output, half the bits of the input must change.
+This is not a mathematically precise definition, but it clearly shows the goals of this random number generator: for every similar input, the output must be dramatically different.
+For every similar output, the input must be dramatically different.
+
+There are more complex ways of generating diffusion; for example, `S-Boxes.'
+These are lookup tables that do effectively provide great diffusion for the input, but as they are lookup tables, they are large enough to blow out the cache budget of many processors.
+Because of that, they tend to be very slow, and \emph{differently slow depending on input.}
+This is a critical design flaw that Salsa avoided.
+The reason this is a problem is that, if the attacker can measure timings of the stream accurately, they can potentially gain secrets without direct access to any hardware holding the secrets--this is even more pertinent nowadays, when timing-based side channels are one of the most common hardware-level security concerns.
 
 %% Iteration.u

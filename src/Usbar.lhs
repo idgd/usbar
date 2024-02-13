@@ -151,6 +151,10 @@ weave :: String -> String
 weave = concat . (fmap weaved) . loom
 \end{code}
 
+Just realized I can strip out the Hierarch thing entirely.
+Each document class relies on a different hierarchy.
+So, the hierarch is actually useless.
+
 \begin{code}
 loom :: String -> [Weave]
 loom ('%':'S':b) = (Hierarch Section $ getTitle b) : (loom $ skipTitle b)
