@@ -1,0 +1,11 @@
+%@ Quarter Round
+
+#define CHACHA_QUARTERROUND(a, b, c, d)  \
+  a += b; d ^= a; d = d << 16 | d >> 16; \
+  c += d; b ^= c; b = b << 12 | b >> 20; \
+  a += b; d ^= a; d = d << 8 | d >> 24;  \
+  c += d; b ^= c; b = b << 7 | b >> 25;
+
+%@
+
+%% Iteration.u

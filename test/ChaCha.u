@@ -1,28 +1,28 @@
-%@ Includes
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-%@
+Notes:
+ChaCha and Salsa are ciphers--they're random number generators that are intended to be xor'd against data you want to encrypt. With shared secrets, you can decrypt the data with another xor.
+The quarter round represents the entire set of operations that ChaCha and salsa use to generate these psuedorandom numbers.
 
-%@ Typedefs
-typedef uint8_t u8;
-typedef uint32_t u32;
-typedef uint64_t u64;
-%@
+There are arguments to use more complex operations, but ChaCha/Salsa chose the ones they did for speed, and because with the operations done as they are, they have provided reasonable security--eight rounds is considered unbreakable today, and the default is to use 20 rounds. Not only do we want it fast, we also want it CONSISTENTLY fast--if the timing of each operation changes depending on the input, which integer multiplication does indeed do, then secrets could possibly leak if the attacker can read timing information.
 
-%@ ChaCha Opaque Type
-typedef u32 ChaCha[17];
-%@
+Another alternative not used in chacha/salsa is "s-boxes," which are lookup tables that take an 8-bit index and return a larger word. ChaCha/Salsa decided against it because of several reasons:
+1. L1 cache pressure: lookup tables are huge, and take a lot of space on caches.
+2. Equivalence of work done: S-boxes mangle input very thoroughly, but so do the integer operations that salsa does; there's no reason not to do this.
+3. Timing attacks: related to the L1 cache pressure, retrieving things from different parts of the table actually takes different amounts of time--so, attackers can read them more easily.
 
-%@ Quarter Round
-#define CHACHA_QUARTERROUND(a, b, c, d)  \
-  a += b; d ^= a; d = d << 16 | d >> 16; \
-  c += d; b ^= c; b = b << 12 | b >> 20; \
-  a += b; d ^= a; d = d << 8 | d >> 24;  \
-  c += d; b ^= c; b = b << 7 | b >> 25;
-%@
+There was a question on whether or not to reduce the number of rotations in the quarter round. It was decided to use rotations because it provides as much "diffusion" as two xors and two shifts, and is universally faster.
 
+What is this? it's a psuedo-random number generator; it takes a seed and a nonce (a second seed), and generates a bytestream that can be xor'd with data that needs to be encrypted to encrypt it. It generates this stream in 64 byte blocks. There is no dependency between each block, so any number of blocks can be computed in parallel. The generation of the starting block is fixed-time--a simple memory copy operation and that's it.
+
+What does it do?
+the below, 8 times, a configurable number of times, on different parts of the cipher block.
+
+Salsa decided on one type of quarter round repeated many times for L1-cache friendliness.
+
+So, most of the decisions were made to be "good enough" or "best-in-class" for cryptographic randomness, but left out some "might be better" stuff in interest of speed.
+
+ChaCha was made to improve on salsa both in speed and in diffusion.
+
+%% QuarterRound.u
 
 %@ Initialization
 void chacha_init(u32 k[8], u64 n[2], ChaCha o) {
@@ -32,22 +32,19 @@ void chacha_init(u32 k[8], u64 n[2], ChaCha o) {
 }
 %@
 
-%@ Iterate N Rounds
-void chacha_next(ChaCha o) {
-  ChaCha a = {0};
-  memcpy(a, o, 64);
-  for (u8 i = 0; i < 8; i += 2) {
-    CHACHA_QUARTERROUND(a[0], a[4], a[8], a[12]);
-    CHACHA_QUARTERROUND(a[1], a[5], a[9], a[13]);
-    CHACHA_QUARTERROUND(a[2], a[6], a[10], a[14]);
-    CHACHA_QUARTERROUND(a[3], a[7], a[11], a[15]);
-    CHACHA_QUARTERROUND(a[0], a[5], a[10], a[15]);
-    CHACHA_QUARTERROUND(a[1], a[6], a[11], a[12]);
-    CHACHA_QUARTERROUND(a[2], a[7], a[8], a[13]);
-    CHACHA_QUARTERROUND(a[3], a[4], a[9], a[14]);
-  }
-  for (u8 i = 0; i < 16; i++)
-    o[i] += a[i];
+%@ Seed ChaCha
+%# Iterate N Rounds
+%# Initialization
+
+void chacha_seed(char *a, ChaCha o) {
+  if (strnlen(a, 48) == 48) {
+    u32 k[8] = {0};
+    u64 n[2] = {0};
+    memcpy(k, a, 32);
+    memcpy(n, a + 32, 16);
+    chacha_init(k, n, o);
+  } else
+    chacha_init((u32[8]){0}, (u64[2]){0}, o);
 }
 %@
 
@@ -62,15 +59,20 @@ u32 chacha_rand(ChaCha o) {
 }
 %@
 
-%@ Seed ChaCha
-void chacha_seed(char *a, ChaCha o) {
-  if (strnlen(a, 48) == 48) {
-    u32 k[8] = {0};
-    u64 n[2] = {0};
-    memcpy(k, a, 32);
-    memcpy(n, a + 32, 16);
-    chacha_init(k, n, o);
-  } else
-    chacha_init((u32[8]){0}, (u64[2]){0}, o);
-}
+%@ Typedefs
+%# Includes
+
+typedef uint8_t u8;
+typedef uint32_t u32;
+typedef uint64_t u64;
 %@
+
+%@ Includes
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+%@
+
+%# Seed ChaCha
+%# Generating random numbers

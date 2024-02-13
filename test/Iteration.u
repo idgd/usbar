@@ -1,0 +1,26 @@
+%@ ChaCha Opaque Type
+%# Typedefs
+typedef u32 ChaCha[17];
+%@
+
+%@ Iterate N Rounds
+%# ChaCha Opaque Type
+%# Quarter Round
+
+void chacha_next(ChaCha o) {
+  ChaCha a = {0};
+  memcpy(a, o, 64);
+  for (u8 i = 0; i < 8; i += 2) {
+    CHACHA_QUARTERROUND(a[0], a[4], a[8], a[12]);
+    CHACHA_QUARTERROUND(a[1], a[5], a[9], a[13]);
+    CHACHA_QUARTERROUND(a[2], a[6], a[10], a[14]);
+    CHACHA_QUARTERROUND(a[3], a[7], a[11], a[15]);
+    CHACHA_QUARTERROUND(a[0], a[5], a[10], a[15]);
+    CHACHA_QUARTERROUND(a[1], a[6], a[11], a[12]);
+    CHACHA_QUARTERROUND(a[2], a[7], a[8], a[13]);
+    CHACHA_QUARTERROUND(a[3], a[4], a[9], a[14]);
+  }
+  for (u8 i = 0; i < 16; i++)
+    o[i] += a[i];
+}
+%@

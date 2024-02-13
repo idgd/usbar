@@ -1,0 +1,6 @@
+%@ What
+#define WHAT(a) \
+  a + 1
+%@
+
+%% QuarterRound.u

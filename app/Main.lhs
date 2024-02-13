@@ -1,6 +1,6 @@
 \begin{code}
-module Main (main) where
 
+module Main (main) where
 import System.Environment (getArgs)
 
 import Usbar
@@ -13,6 +13,9 @@ main = do
     putStrLn "Please provide one and only one .u file as an argument."
   else do
     let z = head a
-    tangle z
-    weave z
+    y <- parse z
+    let x = tangle y
+    let w = weave y
+    putStrLn w
+    return ()
 \end{code}
