@@ -1,0 +1,7 @@
+%@
+int main(void) { return 0; }
+%@ This is against spec
+
+%@
+
+So is this

@@ -38,7 +38,6 @@ parse a = readFile a >>= c' . lines
       else return $ unlines z
 \end{code}
 
-
 \begin{code}
 strip :: String -> String
 strip = dropWhile (\a -> isSeparator a || (a == '\n') || (a == '\t'))
@@ -61,7 +60,8 @@ source = a' . lines
 
     b' (('%':'@':_):b) = "%@\n" ++ a' b
     b' (b:c) = b ++ "\n" ++ b' c
-    b' _ = error "Error: Reached end of source file inside a source block."
+    b' _ = error "Error: Reached end of source \
+                 \file inside a source block."
 \end{code}
 
 \begin{code}
@@ -81,7 +81,8 @@ reorder a = c' . b' $ a' a
                         then strip $ getCodeBlock b
                         else x' (skipCodeBlock b) c
     x' (_:b) c = x' b c
-    x' _ b = error "Error: Could not locate an ordering's corresponding source block: " ++ b
+    x' _ b = error "Error: Could not locate an ordering's \
+                   \corresponding source block: " ++ b
 
     c' b = let (c,d) = splitAt (w' b 0) b
                e = x' a (getTitle . drop 2 $ d)
@@ -98,13 +99,18 @@ reorder a = c' . b' $ a' a
 \begin{code}
 eol :: Char -> Bool
 eol = not . ((==) '\n')
+\end{code}
+
+\begin{code}
 getTitle :: String -> String
 getTitle = (takeWhile eol) . strip
 skipTitle :: String -> String
 skipTitle = (dropWhile eol) . strip
 countTitle :: String -> Int
 countTitle = length . takeWhile eol
+\end{code}
 
+\begin{code}
 codeBlock :: String -> String
 codeBlock ('%':'@':_) = ""
 codeBlock (b:c) = b : codeBlock c
@@ -118,7 +124,9 @@ skipCodeBlock = a' . skipTitle
         a' _ = ""
 countCodeBlock :: String -> Int
 countCodeBlock = ((+) 4) . length . codeBlock
+\end{code}
 
+\begin{code}
 listingBlock :: String -> String
 listingBlock ('%':'!':_) = ""
 listingBlock (b:c) = b : listingBlock c
@@ -130,7 +138,9 @@ skipListingBlock = a' . skipTitle
   where a' ('%':'!':b) = b
         a' (_:b) = a' b
         a' _ = ""
+\end{code}
 
+\begin{code}
 grabLine :: String -> String
 grabLine ('\n':_) = "\n"
 grabLine (b:c) = b : grabLine c
@@ -139,7 +149,9 @@ skipLine :: String -> String
 skipLine ('\n':b) = b
 skipLine (_:b) = skipLine b
 skipLine [] = ""
+\end{code}
 
+\begin{code}
 replaceOrdering :: String -> String
 replaceOrdering ('%':'#':a) = "// " ++ (strip $ replaceOrdering a)
 replaceOrdering (a:b) = a : replaceOrdering b
@@ -151,19 +163,21 @@ weave :: String -> String
 weave = concat . (fmap weaved) . loom
 \end{code}
 
-Just realized I can strip out the Hierarch thing entirely.
-Each document class relies on a different hierarchy.
-So, the hierarch is actually useless.
+\begin{code}
+data Weave = Code String String
+           | Ordering String
+           | Weaved String
+\end{code}
 
 \begin{code}
 loom :: String -> [Weave]
-loom ('%':'S':b) = (Hierarch Section $ getTitle b) : (loom $ skipTitle b)
-loom ('%':'C':b) = (Hierarch Chapter $ getTitle b) : (loom $ skipTitle b)
-loom ('%':'P':b) = (Hierarch Part $ getTitle b) : (loom $ skipTitle b)
-loom ('%':'!':b) = (Code (getTitle b) (getListingBlock b)) : (loom $ skipListingBlock b)
-loom ('%':'@':b) = (Code (getTitle b) (replaceOrdering $ getCodeBlock b)) : (loom $ skipCodeBlock b)
-loom ('%':'#':b) = (Ordering $ getTitle b) : (loom $ skipTitle b)
-loom (b:c) = Weaved (grabLine (b:c)) : (loom $ strip $ skipLine (b:c))
+loom ('%':'!':b)  =  (Code (getTitle b) (getListingBlock b))
+                  :  (loom $ skipListingBlock b)
+loom ('%':'@':b)  =  (Code (getTitle b) (replaceOrdering $ getCodeBlock b))
+                  :  (loom $ skipCodeBlock b)
+loom ('%':'#':b)  =  (Ordering $ getTitle b)
+                  :  (loom $ skipTitle b)
+loom (b:c) = Weaved (grabLine (b:c)) : (loom $ skipLine (b:c))
 loom [] = [Weaved ""]
 \end{code}
 
@@ -171,21 +185,11 @@ loom [] = [Weaved ""]
 weaved :: Weave -> String
 weaved (Code a b) = a' ++ b ++ "\\end{lstlisting}\n"
   where
-    a' = "\\begin{lstlisting}[language=C,tabsize=2,caption=" ++ a ++ "]\n"
-weaved (Hierarch Section b) = "\\section{" ++ b ++ "}\n"
-weaved (Hierarch Chapter b) = "\\chapter{" ++ b ++ "}\n"
-weaved (Hierarch Part b) = "\\part{" ++ b ++ "}\n"
+    a'  =    "\\begin{lstlisting}[language=C,tabsize=2,caption="
+        ++   a
+        ++   "]\n"
 weaved (Ordering a) = "{\\tt " ++ a ++ "}\n"
 weaved (Weaved a) = a
-data Rank = Section | Chapter | Part
-  deriving Show
-data Weave = Code String String
-           | Hierarch Rank String
-           | Ordering String
-           | Weaved String
-  deriving Show
-instance Semigroup Weave where
-  (<>) a b = Weaved $ weaved a ++ weaved b
 \end{code}
 
 \end{document}
