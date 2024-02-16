@@ -12,22 +12,71 @@
 %include polycode.fmt
 \begin{document}
 
-\begin{code}
-module Usbar
-  ( parse
-  , tangle
-  , weave
-  ) where
-\end{code}
+Usbar is a literate programming system, designed specifically for C and \LaTeX.
+While CWEB exists, its syntax is fundamentally incompatible with FRAMA-C's validation language, ACSL.
+Additionally, CWEB pipes to \TeX.
+While this is a perfectly capable typesetting system, \LaTeX\ has access to more capabilities, like graphing and the rich package repository on CTAN.
+Because of this, I spun up a simple alternative, which should be relatively easy to rework for alternate languages, or tie into the library to build newer, more complex applications than the sample implementation included in this package.
+
+The three functions this module exports are parsing, tangling, and weaving.
+Parsing returns an algebraic data type, which tangle and weave consume in order to produce a final string.
+So, an application which uses this library will either have to parse an input, or generate a list of the data type, Usbar, itself.
 
 \begin{code}
-import Data.Char (isSeparator)
+module Usbar
+  (  parse
+  ,  tangle
+  ,  weave
+  ,  Usbar
+  )  where
+\end{code}
+
+We don't have many external dependencies, and only one that isn't included with GHC.
+The file path module here is from the {\tt filepath} package, and simplifies some work with opening files.
+The character module is used for its functions matching a wide class of individual characters.
+
+\begin{code}
+import Data.Char (isSeparator, isSpace)
 import System.FilePath (takeDirectory, (</>))
 \end{code}
 
+Parsing is very simple: we first expand any file insert commands, then parse the finalized string into the Usbar data type.
+It is at this point that I think it'd be a good idea to list what the input file format is supposed to look like.
+
 \begin{code}
-parse :: FilePath -> IO String
-parse a = readFile a >>= c' . lines
+parse :: FilePath -> IO [Usbar]
+parse a = expand a >>= return . usbar
+\end{code}
+
+There are three commands in this system: {\tt \%@@}, {\tt \%\#}, and {\tt \%\%}.
+The first is `generate a source block,' code that is meant to be passed to a compiler through tangling.
+This is a `block' commands; that is, the command comes in a pair, and anything between the pair is interpreted as their input.
+The rest are `single-line' commands: they take the rest of the line they appear on as input.
+
+The second is an `ordering' command.
+When writing the source document, we can write the source blocks in any order.
+Orderings give us a way to shuffle those blocks into the order we want in the final output; they match titles with a source block, and the order they appear in the original literate source determines their output order.
+Orderings can appear in the top level, outside of a code block, or inside a code block.
+When they appear in the top level, these are considered the root elements of a tree-like structure.
+When orderings appear in a source block, they are considered the children of whatever ordering spawned them; ultimately, the order is determined by moving down the tree depth-first.
+
+The final command is an insert command; this reads an external file, and inserts it, verbatim, into the source that is being parsed.
+We can see that command being executed below.
+This is the only part of the parser that needs IO access.
+We read the original, root file, and iterate over each line; when we match an insert command, we read the file pointed to in the remainder of the line.
+So:
+
+\begin{verbatim}
+%% directory/filename.u
+\end{verbatim}
+
+Will read {\tt filename.u}, relative to the source file, and insert its contents wherever it's found.
+We read the resulting string to see if it has any remaining insert commands, and recurse if we find them.
+If we don't, we return the final string.
+
+\begin{code}
+expand :: FilePath -> IO String
+expand a = readFile a >>= c' . lines
   where
     a' b = takeDirectory a </> strip b
     b' ('%':'%':b) = readFile (a' b) >>= return . lines
@@ -38,158 +87,165 @@ parse a = readFile a >>= c' . lines
       else return $ unlines z
 \end{code}
 
+There's one utility function I'll call out.
+It reads a string, and strips any leading whitespace.
+This are the primary place we see the character matches come into play.
+
 \begin{code}
 strip :: String -> String
-strip = dropWhile (\a -> isSeparator a || (a == '\n') || (a == '\t'))
+strip = dropWhile (\a -> isSeparator a || isSpace a)
 \end{code}
 
-\begin{code}
-tangle :: String -> String
-tangle = reorder . source
-\end{code}
+Let's start looking at some types we'll be using next.
+The first ones are simple type aliases, to clarify what we're going to be doing in the more complex algebraic data type coming up.
 
 \begin{code}
-source :: String -> String
-source = a' . lines
+type Title = String
+type Content = String
+\end{code}
+
+This is the main data type we'll be working with going forward.
+First to build it, and next to deconstruct it into its final form as a tangled or weaved source file.
+These represent the four types of elements we deal with in the source literate file.
+Firstly, a source block, which has a corresponding title, and a list of lines representing their content (Orderings or C).
+Orderings have a title, that must match a source block in the end.
+C is source code, and Weave is text meant for humans.
+
+\begin{code}
+data Usbar  =  Source Title [Usbar]
+            |  Ordering Title
+            |  C Content
+            |  Weave Content
+\end{code}
+
+To parse it, we pass the lines through a helper function to index each one (give them a line number), and pass it to our internal parsing function.
+
+\begin{code}
+usbar :: String -> [Usbar]
+usbar = a' . indexed . lines
+\end{code}
+
+The parsing function reads the first two characters of any line in order to check if they are a source block, or an ordering.
+At this point, all inserts have been removed in the expansion process, so these are the only ones we must check.
+When they find a source block, they check for a missing title, and error out if so, or hand it over to a helper function.
+Similarly, when it finds an ordering, it will check for the same error, and prepend the correct Usbar constructor if it's clear.
+If it doesn't see a command, it passes it verbatim to be weaved; these will later be ignored by the tangle.
+
+\begin{code}
   where
-    a' :: [String] -> String
-    a' (('%':'@':b):c) = "%@" ++ b ++ "\n" ++ b' c
-    a' (('%':'#':b):c) = "%#" ++ b ++ "\n" ++ a' c
-    a' (_:b) = a' b
-    a' _ = []
-
-    b' (('%':'@':_):b) = "%@\n" ++ a' b
-    b' (b:c) = b ++ "\n" ++ b' c
-    b' _ = error "Error: Reached end of source \
-                 \file inside a source block."
+    a' ((('%':'@':b),c):d) =  if strip b == ""
+                              then missingTitle c
+                              else b' b [] d
+    a' ((('%':'#':b),c):d) =  if strip b == ""
+                              then missingTitle c
+                              else Ordering (strip b) : a' d
+    a' (b:c) = Weave (fst b) : a' c
+    a' [] = []
 \end{code}
 
+Our helper function looks first for the closing command.
+If it finds it, it constructs an Usbar, and hands control back over to our first function for the remainder.
+If it finds an ordering, it adds it to the list, and plunks it into the list.
+It ignores empty lines, and anything else is counted as C source code.
+If it reaches the end of the file without finding a closing bracket, it'll complain about missing a closing half.
+
 \begin{code}
-reorder :: String -> String
-reorder a = c' . b' $ a' a
+    b' b c ((('%':'@':d),e):f) =  if strip d /= ""
+                                  then extraTitle e
+                                  else Source (strip b) (reverse c) : a' f
+    b' b c ((('%':'#':d),e):f) =  if strip d == ""
+                                  then missingTitle e
+                                  else b' b (Ordering (strip d) : c) f
+    b' b c ((([]),_):d) = b' b c d
+    b' b c ((d,_):e) = b' b (C d : c) e
+    b' _ _ [] = noClose
+\end{code}
+
+The errors are shown below; they're very basic, crashing the program with a specific error message, including the line numbers and specific problems with the source.
+
+\begin{code}
+missingTitle :: Int -> a
+missingTitle a  =   error $ "ERROR: Line "
+                ++  show a
+                ++  " has a missing title."
+extraTitle :: Int -> a
+extraTitle a  =   error $ "ERROR: Line "
+              ++  show a
+              ++  " has a title, when it should not."
+noClose :: a
+noClose  =   error "ERROR: Missing closing command on a "
+         ++  "listing or source block."
+noMatch :: String -> a
+noMatch a  =   error $ "ERROR: Missing source block for ordering: "
+           ++  a
+\end{code}
+
+Our indexed function is similarly simple: it zips the input and a sugary list comprehension of one to the length of the input, inclusive.
+
+\begin{code}
+indexed :: [a] -> [(a,Int)]
+indexed a = zip a [1..length a]
+\end{code}
+
+Now we'll get into the meat of the operation: tangling and weaving.
+Starting with tangling, we pipe the input list into a pipeline of two functions.
+Let's look at those in more detail.
+
+\begin{code}
+tangle :: [Usbar] -> String
+tangle a = a' a
   where
-    a' = z' 0
-    z' b ('%':'@':c) = z' (b + countCodeBlock c) (skipCodeBlock c)
-    z' b ('%':'#':c) = b : z' (b + 2 + countTitle c) (skipTitle c)
-    z' b (_:c) = z' (b + 1) c
-    z' _ [] = []
-
-    b' b = let d = getTitle . drop 2 . snd . flip splitAt a <$> b
-             in foldr y' "" d
-    y' b c = x' a b ++ c
-    x' ('%':'@':b) c =  if (getTitle b == c)
-                        then strip $ getCodeBlock b
-                        else x' (skipCodeBlock b) c
-    x' (_:b) c = x' b c
-    x' _ b = error "Error: Could not locate an ordering's \
-                   \corresponding source block: " ++ b
-
-    c' b = let (c,d) = splitAt (w' b 0) b
-               e = x' a (getTitle . drop 2 $ d)
-               f = c ++ e ++ (strip . skipTitle . drop 2 $ d)
-           in if (v' f) then c' f else f
-    w' ('%':'#':_) b = b
-    w' (_:b) c = w' b (c + 1)
-    w' _ _ = error "Error: Could not locate an ordering."
-    v' ('%':'#':_) = True
-    v' (_:b) = v' b
-    v' _ = False
+    a' = c' . b'
 \end{code}
+
+We're continuing the use of pattern matching into the rest of the program; we match on orderings, C, and nothing else.
+Orderings, we hand work over to another function; otherwise, we simply recurse.
+The effect of this function is to expand orderings, while removing any other type of element outside of C lines.
+So, we delete weaved elements, and reorder, in one step.
 
 \begin{code}
-eol :: Char -> Bool
-eol = not . ((==) '\n')
+    b' (Ordering b:c) = d' b a ++ b' c
+    b' (C b:c) = C b : b' c
+    b' (_:b) = b' b
+    b' [] = []
 \end{code}
 
-\begin{code}
-getTitle :: String -> String
-getTitle = (takeWhile eol) . strip
-skipTitle :: String -> String
-skipTitle = (dropWhile eol) . strip
-countTitle :: String -> Int
-countTitle = length . takeWhile eol
-\end{code}
+In the next step, we transform C into a single string by appending the disparate strings.
+It's very straightforward, so we'll move forward to the final command, which reorders the source blocks.
 
 \begin{code}
-codeBlock :: String -> String
-codeBlock ('%':'@':_) = ""
-codeBlock (b:c) = b : codeBlock c
-codeBlock _ = ""
-getCodeBlock :: String -> String
-getCodeBlock = codeBlock . skipTitle
-skipCodeBlock :: String -> String
-skipCodeBlock = a' . skipTitle
-  where a' ('%':'@':b) = b
-        a' (_:b) = a' b
-        a' _ = ""
-countCodeBlock :: String -> Int
-countCodeBlock = ((+) 4) . length . codeBlock
+    c' (C b:c) = b ++ "\n" ++ c' c
+    c' (_:b) = c' b
+    c' [] = ""
 \end{code}
 
-\begin{code}
-listingBlock :: String -> String
-listingBlock ('%':'!':_) = ""
-listingBlock (b:c) = b : listingBlock c
-listingBlock _ = ""
-getListingBlock :: String -> String
-getListingBlock = listingBlock . skipTitle
-skipListingBlock :: String -> String
-skipListingBlock = a' . skipTitle
-  where a' ('%':'!':b) = b
-        a' (_:b) = a' b
-        a' _ = ""
-\end{code}
+This function matches source blocks; if we match on the input ordering title, we hand them over to b' to expand any ordering inside--otherwise, we recurse.
+If we don't find a match, we error out.
 
 \begin{code}
-grabLine :: String -> String
-grabLine ('\n':_) = "\n"
-grabLine (b:c) = b : grabLine c
-grabLine [] = ""
-skipLine :: String -> String
-skipLine ('\n':b) = b
-skipLine (_:b) = skipLine b
-skipLine [] = ""
+    d' b (Source c d:e) = if b == c then b' d else d' b e
+    d' b (_:c) = d' b c
+    d' b [] = noMatch b
 \end{code}
 
-\begin{code}
-replaceOrdering :: String -> String
-replaceOrdering ('%':'#':a) = "// " ++ (strip $ replaceOrdering a)
-replaceOrdering (a:b) = a : replaceOrdering b
-replaceOrdering [] = ""
-\end{code}
+And that concludes the entirety of tangling.
+Weaving is considerably simpler: we transform inputs into \LaTeX, without reordering, straight through.
+So we match on every data constructor in Usbar, and construct a \LaTeX\ statement based on it.
+Otherwise, we're done!
 
 \begin{code}
-weave :: String -> String
-weave = concat . (fmap weaved) . loom
+weave :: [Usbar] -> String
+weave ((Source a b):c)  =   "\\begin{lstlisting}"
+                        ++  "[language=C,tabsize=2,caption="
+                        ++  a ++ "]\n" ++ weave b
+                        ++  "\\end{lstlisting}\n"
+                        ++  weave c
+weave ((Ordering a):b) = "{\\tt " ++ a ++ "}\n" ++ weave b
+weave ((C a):b) = a ++ "\n" ++ weave b
+weave ((Weave a):b) = a ++ "\n" ++ weave b
+weave [] = ""
 \end{code}
 
-\begin{code}
-data Weave = Code String String
-           | Ordering String
-           | Weaved String
-\end{code}
-
-\begin{code}
-loom :: String -> [Weave]
-loom ('%':'!':b)  =  (Code (getTitle b) (getListingBlock b))
-                  :  (loom $ skipListingBlock b)
-loom ('%':'@':b)  =  (Code (getTitle b) (replaceOrdering $ getCodeBlock b))
-                  :  (loom $ skipCodeBlock b)
-loom ('%':'#':b)  =  (Ordering $ getTitle b)
-                  :  (loom $ skipTitle b)
-loom (b:c) = Weaved (grabLine (b:c)) : (loom $ skipLine (b:c))
-loom [] = [Weaved ""]
-\end{code}
-
-\begin{code}
-weaved :: Weave -> String
-weaved (Code a b) = a' ++ b ++ "\\end{lstlisting}\n"
-  where
-    a'  =    "\\begin{lstlisting}[language=C,tabsize=2,caption="
-        ++   a
-        ++   "]\n"
-weaved (Ordering a) = "{\\tt " ++ a ++ "}\n"
-weaved (Weaved a) = a
-\end{code}
+Haskell made this process very easy and straightforward--while a few rewrites were warranted, and I cut out a lot of unecessary functionality, it ended up being a very elegant program with very few lines of code.
 
 \end{document}
