@@ -393,7 +393,7 @@ weave ((Source a b):c)  =   "\\begin{lstlisting}"
                         ++  a ++ "]\n" ++ weave b
                         ++  "\\end{lstlisting}\n"
                         ++  weave c
-weave ((Ordering a):b) = "{\\tt " ++ a ++ "}\n" ++ weave b
+weave ((Ordering a):b) = "//\t" ++ a ++ "\n\n" ++ weave b
 weave ((C a):b) = a ++ "\n" ++ weave b
 weave ((Weave a):b) = a ++ "\n" ++ weave b
 weave [] = ""
