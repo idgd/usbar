@@ -31,7 +31,7 @@ module Usbar
   (  parse
   ,  tangle
   ,  weave
-  ,  Usbar
+  ,  Usbar (..)
   )  where
 \end{code}
 
@@ -49,7 +49,7 @@ It is at this point that I think it'd be a good idea to list what the input file
 
 \begin{code}
 parse :: FilePath -> IO [Usbar]
-parse a = expand a >>= return . usbar
+parse a = expand a >>= pure . usbar
 \end{code}
 
 There are three commands in this system: {\tt \%@@}, {\tt \%\#}, and {\tt \%\%}.
@@ -177,7 +177,7 @@ extraTitle a  =   error $ "ERROR: Line "
               ++  show a
               ++  " has a title, when it should not."
 noClose :: a
-noClose  =   error "ERROR: Missing closing command on a "
+noClose  =   error $ "ERROR: Missing closing command on a "
          ++  "listing or source block."
 noMatch :: String -> a
 noMatch a  =   error $ "ERROR: Missing source block for ordering: "
