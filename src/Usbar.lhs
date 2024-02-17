@@ -22,6 +22,29 @@ We chose the name `Usbar' because it's the Sumerian word for `weaver.'
 It seemed like an appropriate theme for something whose primary function is named `weaving,' and the use of Sumerian (the oldest written language) means I'm very unlikely to be stumbling upon intellectual property or insensitive words.
 The name is a bit awkward, but it works for the purposes it's intended for.
 
+This document can be parsed from its Literate Haskell source using Pandoc or, more preferably, lhs2\TeX.
+To convert using Pandoc, use this invocation:
+
+\begin{verbatim}
+pandoc -f latex+lhs -t pdf src/Usbar.lhs -o usbar.pdf
+\end{verbatim}
+
+Alternatively, you can use a different output format, like Markdown, if you want a plaintext representation that removes the \LaTeX-isms of the source file:
+
+\begin{verbatim}
+pandoc -f latex+lhs -t commonmark src/Usbar.lhs -o usbar.md
+\end{verbatim}
+
+The more recommended path is to use lhs2\TeX, and combine that with a \LaTeX\ interpreter from the TeXLive distribution.
+The invocation I use on my Linux machine is this:
+
+\begin{verbatim}
+lhs2TeX src/Usbar.lhs > usbar.tex && texi2pdf -c usbar.tex
+\end{verbatim}
+
+This produces nicer output with ligatures and similar features that pandoc's more generic conversion methods lack.
+It is the method I consider canonical for this document.
+
 The three functions this module exports are parsing, tangling, and weaving.
 Parsing returns an algebraic data type, which tangle and weave consume in order to produce a final string.
 So, an application which uses this library will either have to parse an input, or generate a list of the data type, Usbar, itself.
