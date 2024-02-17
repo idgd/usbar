@@ -68,12 +68,52 @@ import System.FilePath (takeDirectory, (</>))
 \end{code}
 
 Parsing is very simple: we first expand any file insert commands, then parse the finalized string into the Usbar data type.
-It is at this point that I think it'd be a good idea to list what the input file format is supposed to look like.
 
 \begin{code}
 parse :: FilePath -> IO [Usbar]
 parse a = expand a >>= pure . usbar
 \end{code}
+
+Since this document is intended to not only be a canonical source for Usbar's main functionality, but also a basic introduction to how programming is done in Haskell, I'll take a bit of extra time to break down each function and the more unique features used by each one.
+Every Haskell function has two components: a type signature, and an implementation body.
+The type signature is the first line:
+
+\begin{verbatim}
+parse :: FilePath -> IO [Usbar]
+\end{verbatim}
+
+The name of the function comes first, followed by the two colons, {\tt ::}, which is followed by the types involved in this function.
+Each type is delimited by the arrows, {\tt ->}; the final element in the list is the output value of the function, while each preceding one is an input.
+So, this function takes a {\tt FilePath} as an input, and outputs an {\tt IO [Usbar]}.
+Like many languages, {\tt []} is the notation indicating a list, or array--so this function outputs an array of some sort, but it's preceded by this {\tt IO} type.
+
+A value of the type {\tt IO} is a computation which yields some value--in this case, a list of the {\tt Usbar} type.
+These values are lists of commands, interpreted by the runtime, starting at the {\tt main} function, and going down the tree until execution is done.
+You may have heard the term `monad' before--they may sound scary, but they are very simple to use and understand.
+Describing them succinctly is hard--there is an entire genre of blog posts dedicated just to explaining monads, so I will not explain them in much detail here.
+Sufficed to say, monads are not related to {\tt IO} in any meaningful way, and many other types have a monad--you may have even used one in your own programming projects without knowing it--Haskell just happens to use the {\tt IO} monad to compose values of that type.
+Let's look at the {\tt parse} function in more detail.
+
+\begin{verbatim}
+parse a = expand a >>= pure . usbar
+\end{verbatim}
+
+The name of the function is followed by the name of the input variable--the {\tt FilePath} from the type--and an equals sign.
+The equals sign denotes equality--an application of the name on the left to a variable of a compatible type will expand to what's on the right, with the {\tt a} substituted for the applied value.
+There are five functions called in this body; we'll descsribe each in order.
+
+The first function on the left is {\tt expand}, which is a function we define ourselves--we will look into it as our next piece of Haskell code.
+This is applied to the {\tt FilePath} input; the next function is this mysterious symbol, the {\tt >>=}, sometimes called `the fish.'
+
+The fish is one of the two \emph{monadic composition} functions--the other being {\tt >>}, which doesn't really have a catchy name like the first.
+The fish sequentially composes two functions, taking the output of the first (left side) and applying it to the second (right side).
+These functions need to output the same wrapping monad type--that is to say, a function of type {\tt a -> IO b} and {\tt b -> IO c} can be composed with the fish, but {\tt a -> IO b} and {\tt b -> [c]} cannot (lists are also a monad, but of a different type to {\tt IO}).
+
+This is why, on the right side, we have two functions, composed with the $\circ$ function; {\tt usbar} and {\tt pure}.
+{\tt pure} is a synonym for {\tt return}, but this isn't {\tt return} as you would think of it in another language--{\tt pure}/{\tt return} wrap a plain value in a monad type; in this case, it's taking the output of {\tt usbar} and wrapping it in {\tt IO}.
+
+So, {\tt parse} is two steps: firstly, a call to {\tt expand}; then, a call to {\tt usbar}, wrapped in the IO type that {\tt parse} returns.
+It is at this point that I think it'd be a good idea to explain what the input file format is supposed to look like.
 
 There are three commands in this system: {\tt \%@@}, {\tt \%\#}, and {\tt \%\%}.
 The first is `generate a source block,' code that is meant to be passed to a compiler through tangling.
@@ -104,6 +144,20 @@ If we don't, we return the final string.
 \begin{code}
 expand :: FilePath -> IO String
 expand a = readFile a >>= c' . lines
+\end{code}
+
+This is another example of monadic composition, and very similar to our parent function.
+Let's look at the right hand side.
+This is another composition of two functions, {\tt lines} and {\tt c'}.
+{\tt lines} is a standard library function which splits a string into a list of the component lines:
+
+\begin{verbatim}
+"abc\ndef\nghi" -> ["abc","def","ghi"]
+\end{verbatim}
+
+And {\tt c'} is a local function we define using a {\tt where} clause:
+
+\begin{code}
   where
     a' b = takeDirectory a </> strip b
     b' ('%':'%':b) = readFile (a' b) >>= return . lines
@@ -114,7 +168,57 @@ expand a = readFile a >>= c' . lines
       else return $ unlines z
 \end{code}
 
-There's one utility function I'll call out.
+The {\tt where} clause allows us to define functions which are only available to their parent function, and are not exposed in any other scope.
+Here, we're using it to split out the different steps our function takes.
+Let's look through them, starting with {\tt c'}, to understand what we're doing here.
+
+\begin{verbatim}
+c' b = concat <$> mapM b' b >>= \z ->
+  if (any (\x -> take 2 x == "%%") z)
+  then c' z
+  else return $ unlines z
+\end{verbatim}
+
+This is a relatively more complex function than ones we've looked at before, but it'll become clear as we step through it.
+It takes one input, the list of lines that {\tt lines} returns.
+The {\tt <\$>} symbol is the infix version of {\tt fmap}, Haskell's structure-agnostic mapping function.
+There is a {\tt fmap} defined for many structures in the standard library, from {\tt IO}, to {\tt Maybe}, or the list--in this case, we're using the list's {\tt fmap}, so we are applying the function on the left to every element of the list on the right.
+
+The function on the left is the {\tt concat} function--this flattens a list of lists of elements to a list of elements.
+Our right side is a {\tt mapM}; this is a variation of {\tt fmap} which applies functions monadically, using the fish we've seen before.
+This applies the {\tt b'} function to the list of lines we received.
+
+The output of this map is piped to a lambda function (a nameless function with one argument, {\tt z}), which is the if statement that follows.
+We check to see if any lines start with the insert command, and recurse if so.
+Otherwise, we return a string concatenated from the disparate lines using {\tt unlines}.
+The {\tt \$} symbol is a function application function--which sounds redundant, but is very useful.
+You'll see it a lot; think of it as a parentheses that goes to the end of the current statement:
+
+\begin{verbatim}
+return $ unlines z == return (unlines z)
+\end{verbatim}
+
+Let's take a look at {\tt b'}.
+This is our first example of Haskell's pattern matching syntax.
+In the same way that we can define piecewise functions in basic algebra, in Haskell, we can choose what to execute based on what the input is, without using an if or case statement like in many other languages.
+In this case, we're matching on a string, so we split it into the individual characters we want to see.
+If we find them, we read the resulting file, and split the result into lines.
+Otherwise, we simply wrap the result in the necessary types, and return that.
+
+\begin{verbatim}
+b' ('%':'%':b) = readFile (a' b) >>= return . lines
+b' b = return [b]
+\end{verbatim}
+
+We call an {\tt a'} in {\tt b'}, so as a final deep dive into the {\tt expand} function, let's look at that.
+This is a much simpler function: we want to take the directory of the input file path, and append the filename listed in the {\tt \%\%} command.
+This gives us the file that the command points to, without forcing the file to specify a global URI for the file it wants to insert.
+
+\begin{verbatim}
+a' b = takeDirectory a </> strip b
+\end{verbatim}
+
+After this, there's one utility function I'll call out.
 It reads a string, and strips any leading whitespace.
 This are the primary place we see the character matches come into play.
 
@@ -138,6 +242,12 @@ Firstly, a source block, which has a corresponding title, and a list of lines re
 Orderings have a title, that must match a source block in the end.
 C is source code, and Weave is text meant for humans.
 
+This is an algebraic data type declaration: Haskell's main selling point is its strong type system, and this is one very good example.
+We call it an `algebraic' data type because we can run operations on the type that transform it in very mathematical ways.
+As an example, the $\mid$ symbol is equivalent to addition--each new element in a list of $\mid$ is a new, exclusive possibility for that type.
+Types that use this are called `sum types,' because they are the sum of all the different possible constructors (the elements on the right of the equals sign).
+We will be using pattern matching on this type extensively coming up.
+
 \begin{code}
 data Usbar  =  Source Title [Usbar]
             |  Ordering Title
@@ -146,6 +256,11 @@ data Usbar  =  Source Title [Usbar]
 \end{code}
 
 To parse it, we pass the lines through a helper function to index each one (give them a line number), and pass it to our internal parsing function.
+
+This function is written in a point-free style; that is, the input variables aren't explicitly written out.
+Writing functions like this is somewhat controversial, but the semantics of Haskell permit it, so I use it here as demonstration.
+To understand what it's doing, imagine the right side of the body in parenthesis, applied to a string.
+{\tt lines} splits it into a list of lines, the {\tt indexed} function adds line numbers to them, and {\tt a'} does the special magic that turns it into a list of our algebraic data type, {\tt Usbar}.
 
 \begin{code}
 usbar :: String -> [Usbar]
@@ -157,6 +272,13 @@ At this point, all inserts have been removed in the expansion process, so these 
 When they find a source block, they check for a missing title, and error out if so, or hand it over to a helper function.
 Similarly, when it finds an ordering, it will check for the same error, and prepend the correct Usbar constructor if it's clear.
 If it doesn't see a command, it passes it verbatim to be weaved; these will later be ignored by the tangle.
+
+If the pattern match is a bit confusing, don't worry--it's just verbose, not inherently complex.
+Just like with our string match, it's matching on a string at the innermost level: the {\tt '\%':'\#':b} statement matches a string that starts with {\tt "\%\#"}, and ends with any value, represented by {\tt b}.
+After that, we are matching on what's called a tuple--think of it as a fixed-length list, like a vector.
+In code, you'd write a tuple like {\tt (a,b,c,d)}, same as in the pattern match.
+In this case, the tuple is of the string value in the first slot, and the line number in the second.
+This is what our indexed function does--it takes a list, and transforms it into a list of tuples, with the original value on the left, and the line number on the right.
 
 \begin{code}
   where
@@ -226,7 +348,8 @@ tangle a = a' a
 \end{code}
 
 We're continuing the use of pattern matching into the rest of the program; we match on orderings, C, and nothing else.
-Orderings, we hand work over to another function; otherwise, we simply recurse.
+Orderings, we hand work over to another function, with the ordering's title added; otherwise, we simply recurse.
+This should match a source block somewhere in the original file, so we send the original file ({\tt a}) in along with the title we're looking for.
 The effect of this function is to expand orderings, while removing any other type of element outside of C lines.
 So, we delete weaved elements, and reorder, in one step.
 
@@ -248,6 +371,9 @@ It's very straightforward, so we'll move forward to the final command, which reo
 
 This function matches source blocks; if we match on the input ordering title, we hand them over to b' to expand any ordering inside--otherwise, we recurse.
 If we don't find a match, we error out.
+The data type is ideal for this kind of work; {\tt Source} is a title and list of other {\tt Usbar} constructors.
+So, we have a function which consumes {\tt Usbar} in a list, and if it finds an ordering, it asks for the corresponding {\tt Source}, and replaces it with the {\tt Source}'s contents--\emph{which are expanded in the same way as the top-level list.}
+This allows a one-step recursion that expands a tree and orders it by traversing it depth-first, expanding each node it encounters along the way.
 
 \begin{code}
     d' b (Source c d:e) = if b == c then b' d else d' b e
