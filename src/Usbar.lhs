@@ -18,6 +18,10 @@ Additionally, CWEB pipes to \TeX.
 While this is a perfectly capable typesetting system, \LaTeX\ has access to more capabilities, like graphing and the rich package repository on CTAN.
 Because of this, I spun up a simple alternative, which should be relatively easy to rework for alternate languages, or tie into the library to build newer, more complex applications than the sample implementation included in this package.
 
+We chose the name `Usbar' because it's the Sumerian word for `weaver.'
+It seemed like an appropriate theme for something whose primary function is named `weaving,' and the use of Sumerian (the oldest written language) means I'm very unlikely to be stumbling upon intellectual property or insensitive words.
+The name is a bit awkward, but it works for the purposes it's intended for.
+
 The three functions this module exports are parsing, tangling, and weaving.
 Parsing returns an algebraic data type, which tangle and weave consume in order to produce a final string.
 So, an application which uses this library will either have to parse an input, or generate a list of the data type, Usbar, itself.
@@ -50,7 +54,7 @@ parse a = expand a >>= return . usbar
 
 There are three commands in this system: {\tt \%@@}, {\tt \%\#}, and {\tt \%\%}.
 The first is `generate a source block,' code that is meant to be passed to a compiler through tangling.
-This is a `block' commands; that is, the command comes in a pair, and anything between the pair is interpreted as their input.
+This is a `block' commands; that is, the command comes in a pair, and anything between the pair is interpreted as its input.
 The rest are `single-line' commands: they take the rest of the line they appear on as input.
 
 The second is an `ordering' command.
