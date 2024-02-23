@@ -46,8 +46,8 @@ This produces nicer output with ligatures and similar features that pandoc's mor
 It is the method I consider canonical for this document.
 
 The three functions this module exports are parsing, tangling, and weaving.
-Parsing returns an algebraic data type, which tangle and weave consume in order to produce a final string.
-So, an application which uses this library will either have to parse an input, or generate a list of the data type, Usbar, itself.
+Parsing returns a data type which tangle and weave transform into a string.
+So, an application which uses this library will either have to parse an input, or generate a list of the type Usbar itself.
 
 \begin{code}
 module Usbar
@@ -59,8 +59,8 @@ module Usbar
 \end{code}
 
 We don't have many external dependencies, and only one that isn't included with GHC.
-The file path module here is from the {\tt filepath} package, and simplifies some work with opening files.
-The character module is used for its functions matching a wide class of individual characters.
+The file path module here is from the \emph{filepath} package.
+The character module is used to match sets of characters.
 
 \begin{code}
 import Data.Char (isSeparator, isSpace)
@@ -71,7 +71,7 @@ Parsing is very simple: we first expand any file insert commands, then parse the
 
 \begin{code}
 parse :: FilePath -> IO [Usbar]
-parse a = expand a >>= pure . usbar
+parse a = usbar <$> expand a
 \end{code}
 
 Since this document is intended to not only be a canonical source for Usbar's main functionality, but also a basic introduction to how programming is done in Haskell, I'll take a bit of extra time to break down each function and the more unique features used by each one.
@@ -160,10 +160,10 @@ And {\tt c'} is a local function we define using a {\tt where} clause:
 \begin{code}
   where
     a' b = takeDirectory a </> strip b
-    b' ('%':'%':b) = readFile (a' b) >>= return . lines
+    b' ('%':'%':b) = lines <$> readFile (a' b)
     b' b = return [b]
     c' b = concat <$> mapM b' b >>= \z ->
-      if (any (\x -> take 2 x == "%%") z)
+      if any (\x -> take 2 x == "%%") z
       then c' z
       else return $ unlines z
 \end{code}
@@ -174,7 +174,7 @@ Let's look through them, starting with {\tt c'}, to understand what we're doing 
 
 \begin{verbatim}
 c' b = concat <$> mapM b' b >>= \z ->
-  if (any (\x -> take 2 x == "%%") z)
+  if any (\x -> take 2 x == "%%") z
   then c' z
   else return $ unlines z
 \end{verbatim}
@@ -305,7 +305,7 @@ If it reaches the end of the file without finding a closing bracket, it'll compl
     b' b c ((('%':'#':d),e):f) =  if strip d == ""
                                   then missingTitle e
                                   else b' b (Ordering (strip d) : c) f
-    b' b c ((([]),_):d) = b' b c d
+    b' b c (([],_):d) = b' b c d
     b' b c ((d,_):e) = b' b (C d : c) e
     b' _ _ [] = noClose
 \end{code}
@@ -385,20 +385,56 @@ And that concludes the entirety of tangling.
 Weaving is considerably simpler: we transform inputs into \LaTeX, without reordering, straight through.
 So we match on every data constructor in Usbar, and construct a \LaTeX\ statement based on it.
 Otherwise, we're done!
+When matching a Source specifically, we want to handle the orderings slightly differently than in the top level--we want them to appear as comments pointing to the ordered listing, so the reader can follow along.
+So, when encountering a source, we add a bunch of options (mostly prettification for C's operators) to the listing environment, and hand off to a local function to handle the inner section.
 
 \begin{code}
 weave :: [Usbar] -> String
 weave ((Source a b):c)  =   "\\begin{lstlisting}"
-                        ++  "[language=C,tabsize=2,caption="
-                        ++  a ++ "]\n" ++ weave b
+                        ++  "[ language=C"
+                        ++  ", tabsize=2"
+                        ++  ", columns=fullflexible"
+                        ++  ", breaklines=true"
+                        ++  ", literate="
+                        ++  "{=}{${\\mathrel"
+                            ++  "{\\vcenter"
+                            ++  "{\\baselineskip0.5ex"
+                            ++  "\\lineskiplimit0pt"
+                            ++  "\\hbox{\\scriptsize.}"
+                            ++  "\\hbox{\\scriptsize.}}}=}$"
+                            ++  "\\hspace{0.6ex}}{1}" -- prettier :=
+                        ++  "{==}{$\\equiv$\\hspace{0.7ex}}{2}"
+                        ++  "{!}{$\\lnot$}{2}"
+                        ++  "{!=}{$\\neq$}{2}"
+                        ++  "{&&}{$\\land$}{2}"
+                        ++  "{||}{$\\lor$}{2}"
+                        ++  "{>=}{$\\geq$}{2}"
+                        ++  "{<=}{$\\leq$}{2}"
+                        ++  "{+}{$+$}{2}"
+                        ++  "{++}{$\\succ$}{2}"
+                        ++  "{-}{$-$}{2}"
+                        ++  "{--}{$\\prec$}{2}"
+                        ++  "{NULL}{$\\O$}{1}"
+                        ++  "{->}{$\\rightarrow$}{2}"
+                        ++  ", caption="
+                        ++  a ++ "]\n" ++ a' b
                         ++  "\\end{lstlisting}\n"
                         ++  weave c
-weave ((Ordering a):b) = "//\t" ++ a ++ "\n\n" ++ weave b
+  where
+    a' ((Ordering a):b) = "// Listing:\t" ++ a ++ "\n" ++ a' b
+    a' ((C a):b) = a ++ "\n" ++ a' b
+    a' (_:a) = a' a
+    a' [] = ""
+weave ((Ordering a):b)  =   "\\noindent\\emph{Ordering:}\t"
+                        ++  a
+                        ++  "\\\\ \n"
+                        ++  weave b
 weave ((C a):b) = a ++ "\n" ++ weave b
 weave ((Weave a):b) = a ++ "\n" ++ weave b
 weave [] = ""
 \end{code}
 
-Haskell made this process very easy and straightforward--while a few rewrites were warranted, and I cut out a lot of unecessary functionality, it ended up being a very elegant program with very few lines of code.
+Haskell made this process very straightforward.
+While a few rewrites were warranted, it ended up being an elegant program.
 
 \end{document}
