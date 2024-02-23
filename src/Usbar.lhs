@@ -421,9 +421,9 @@ weave ((Source a b):c)  =   "\\begin{lstlisting}"
                         ++  "\\end{lstlisting}\n"
                         ++  weave c
   where
-    a' ((Ordering a):b) = "// Listing:\t" ++ a ++ "\n" ++ a' b
-    a' ((C a):b) = a ++ "\n" ++ a' b
-    a' (_:a) = a' a
+    a' ((Ordering d):e) = "// Listing:\t" ++ d ++ "\n" ++ a' e
+    a' ((C d):e) = d ++ "\n" ++ a' e
+    a' (_:d) = a' d
     a' [] = ""
 weave ((Ordering a):b)  =   "\\noindent\\emph{Ordering:}\t"
                         ++  a
@@ -435,6 +435,6 @@ weave [] = ""
 \end{code}
 
 Haskell made this process very straightforward.
-While a few rewrites were warranted, it ended up being an elegant program.
+While a few rewrites were warranted, it ended up being an elegant program.n
 
 \end{document}
