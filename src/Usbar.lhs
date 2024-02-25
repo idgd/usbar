@@ -71,7 +71,7 @@ Parsing is very simple: we first expand any file insert commands, then parse the
 
 \begin{code}
 parse :: FilePath -> IO [Usbar]
-parse a = usbar <$> expand a
+parse = fmap usbar . expand
 \end{code}
 
 Since this document is intended to not only be a canonical source for Usbar's main functionality, but also a basic introduction to how programming is done in Haskell, I'll take a bit of extra time to break down each function and the more unique features used by each one.
@@ -94,25 +94,82 @@ Describing them succinctly is hard--there is an entire genre of blog posts dedic
 Sufficed to say, monads are not related to {\tt IO} in any meaningful way, and many other types have a monad--you may have even used one in your own programming projects without knowing it--Haskell just happens to use the {\tt IO} monad to compose values of that type.
 Let's look at the {\tt parse} function in more detail.
 
+Instead of looking at the function as-is, though, we're going to look at a semantically equivalent version which is more readable to an audience that's been trained on imperative programming.
+We'll then build backwards to the simpler version above.
+
 \begin{verbatim}
-parse a = expand a >>= pure . usbar
+parse a = do
+	z <- expand a
+	let y = usbar z
+	pure y
 \end{verbatim}
 
 The name of the function is followed by the name of the input variable--the {\tt FilePath} from the type--and an equals sign.
 The equals sign denotes equality--an application of the name on the left to a variable of a compatible type will expand to what's on the right, with the {\tt a} substituted for the applied value.
-There are five functions called in this body; we'll descsribe each in order.
+The body of the function is in \emph{do notation.}
+Do notation is syntactic sugar, which allows us to write monadic code in a very imperative-looking way.
 
-The first function on the left is {\tt expand}, which is a function we define ourselves--we will look into it as our next piece of Haskell code.
-This is applied to the {\tt FilePath} input; the next function is this mysterious symbol, the {\tt >>=}, sometimes called `the fish.'
+The first function is {\tt expand}, which is a function we define ourselves--we will look into it as our next piece of Haskell code.
+This is applied to the {\tt FilePath} input; because this function performs IO, we use the leftwards-facing arrow to call it, and assign its return value to the symbol {\tt z}.
+It returns an {\tt IO String}, and we will see its type signature soon.
+Because we called it using a leftwards-facing arrow, in the context of this do block, the {\tt z} is a {\tt String}, not an {\tt IO String}. 
+We will illustrate this difference with the next statement.
+
+We pass the result into another function we define, {\tt usbar}, which does not perform IO.
+Its return type is {\tt [Usbar]}.
+Because it does not return a type matching the current do block's monad, we call it using {\tt let}.
+A let statement will still execute the function, but it will not `unwrap' the monadic structure around it.
+In this example, if {\tt usbar} performed IO, a let call would give us back the \emph{recipe}, not the \emph{result}.
+So, if we called:
+
+\begin{verbatim}
+do
+  let z = expand a
+\end{verbatim}
+
+We wouldn't have the same value as the leftwards-facing arrow call.
+{\tt parse} returns an {\tt IO [Usbar]}.
+When we call it using a leftwards-facing arrow, inside of an IO function using do notation, the symbol on the left side of the arrow will be of type {\tt [Usbar]} inside the do block.
+When we call it using a let assignment, we'd get back a {\tt IO [Usbar]}, the \emph{recipe} to create an {\tt [Usbar]}.
+So, inside do notation, we have to keep track of the types we're working with, and appropriately call functions using let or with an arrow, in order to extract their value to pass along the chain, or to get the result directly.
+
+Let's simplify it, and then we'll take one final step and simplify it further to the version we had above.
+
+\begin{verbatim}
+parse a = expand a >>= pure . usbar
+\end{verbatim}
+
+The difference here is that we've manually desugared the do notation we used above.
+When Haskell parses do notation, it first transforms it into this form, before starting on the compilation process proper.
+There's a new function here, {\tt >>=}, which is colloquially called the fish.
 
 The fish is one of the two \emph{monadic composition} functions--the other being {\tt >>}, which doesn't really have a catchy name like the first.
 The fish sequentially composes two functions, taking the output of the first (left side) and applying it to the second (right side).
 These functions need to output the same wrapping monad type--that is to say, a function of type {\tt a -> IO b} and {\tt b -> IO c} can be composed with the fish, but {\tt a -> IO b} and {\tt b -> [c]} cannot (lists are also a monad, but of a different type to {\tt IO}).
 
-This is why, on the right side, we have two functions, composed with the $\circ$ function; {\tt usbar} and {\tt pure}.
+This is why, on the right side, we have two functions, composed with the {\tt .} function; {\tt usbar} and {\tt pure}.
 {\tt pure} is a synonym for {\tt return}, but this isn't {\tt return} as you would think of it in another language--{\tt pure}/{\tt return} wrap a plain value in a monad type; in this case, it's taking the output of {\tt usbar} and wrapping it in {\tt IO}.
+The {\tt .} function is the {\emph composition} function.
+It takes two functions and returns one--as long as the output of the rightwards function matches the input of the leftwards one.
+So, because {\tt pure} takes any type, it accepts the output of {\tt usbar}.
 
 So, {\tt parse} is two steps: firstly, a call to {\tt expand}; then, a call to {\tt usbar}, wrapped in the IO type that {\tt parse} returns.
+So how do we get to the final, simpler form?
+
+\begin{verbatim}
+parse = fmap usbar . expand
+\end{verbatim}
+
+We have a very familiar triplet of functions on the right side, but we're missing an input variable ({\tt a}), and we've been introduced to a new function {\tt fmap}.
+Let's break this down step-by-step.
+Firstly, the lack of an input variable: we will expand upon this later, but to put it simply for now, \emph{input variables are optional in Haskell.}
+Secondly, {\tt fmap} is a \emph{functor lifting function.}
+A functor is something that applies a computation to values inside some structure.
+The reader may already be familiar with {\tt map}; this is a function which takes one function that operates on a certain type, and a list of that type, and applies the function to every element of that list.
+{\tt fmap} is functionally identical, but it can operate on \emph{any type of structure} that defines a functor implementation.
+{\tt IO} happens to include a functor implementation, so we can compose {\tt usbar} lifted over {\tt IO} onto the result of {\tt expand}.
+This may be confusing for now, but it gets easier with more exposure to Haskell.
+
 It is at this point that I think it'd be a good idea to explain what the input file format is supposed to look like.
 
 There are three commands in this system: {\tt \%@@}, {\tt \%\#}, and {\tt \%\%}.
@@ -143,10 +200,10 @@ If we don't, we return the final string.
 
 \begin{code}
 expand :: FilePath -> IO String
-expand a = readFile a >>= c' . lines
+expand a = expand a = readFile a >>= c' . lines
 \end{code}
 
-This is another example of monadic composition, and very similar to our parent function.
+This is another example of monadic composition, and very similar to the second simplification of our previous function.
 Let's look at the right hand side.
 This is another composition of two functions, {\tt lines} and {\tt c'}.
 {\tt lines} is a standard library function which splits a string into a list of the component lines:
@@ -258,6 +315,7 @@ data Usbar  =  Source Title [Usbar]
 To parse it, we pass the lines through a helper function to index each one (give them a line number), and pass it to our internal parsing function.
 
 This function is written in a point-free style; that is, the input variables aren't explicitly written out.
+We have seen this before.
 Writing functions like this is somewhat controversial, but the semantics of Haskell permit it, so I use it here as demonstration.
 To understand what it's doing, imagine the right side of the body in parenthesis, applied to a string.
 {\tt lines} splits it into a list of lines, the {\tt indexed} function adds line numbers to them, and {\tt a'} does the special magic that turns it into a list of our algebraic data type, {\tt Usbar}.
