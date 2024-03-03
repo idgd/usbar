@@ -200,7 +200,7 @@ If we don't, we return the final string.
 
 \begin{code}
 expand :: FilePath -> IO String
-expand a = expand a = readFile a >>= c' . lines
+expand a = readFile a >>= c' . lines
 \end{code}
 
 This is another example of monadic composition, and very similar to the second simplification of our previous function.
